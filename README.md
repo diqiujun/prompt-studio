@@ -257,91 +257,7 @@ def register(ctx):
 - 换了显卡／换了机器：删掉 `runtime\` 下的包目录，重启程序会重新适配。
 - 显存 8 GB 及以上可全量 GPU；4–8 GB 会自动少放层（也能跑）；没有 N 卡自动走 CPU。
 - 只支持 Windows（x64 / ARM64）。Linux、macOS 不提供运行环境。
-
-## 十、姿势库插件（中文姿势参考，右侧工具栏）
-
-姿势库不是内置功能，而是一个**随发行目录自带的插件**：`plugins\pose_gallery\`（数据在其中 `data\`，约 171 MB，源自开源插件 `ai-pose-gallery-zh` 的 1440 条：素体白模缩略图 + 1024 长边参考图 + 深度图）。它通过插件接口把面板挂到**右侧工具栏**：
-
-> **右侧工具栏怎么用**：撰写页右边一条独立栏，姿势库 / ComfyUI 工作流等插件都装在里面，用顶部标签切换；`⟩` 收起、右边竖排「⟨ 工具」展开，快捷键 **Ctrl+Shift+B**；会记住上次开合与选中的标签。写提示词时它一直在，不用来回滚动找面板。
-
-- 缩略图墙：点一张 ＝ 把这张参考图加进「参考图」，角色自动标为「姿势参考（人体动态与构图）」，同时把中文姿势描述插到输入框（例：`斜侧视角，动作：S形站姿・胯部侧顶（全身单人・性感系·站姿）`）；不想插描述就在设置页取消「同时插入描述」。
-- 勾「深度图」：改取该姿势的深度图（角色变为「姿势深度图（ControlNet Depth）」），配 ControlNet 用。
-- 筛选：搜索框（姿势名 / 分类 / 体系）、体系 / 分类 / 视角三个下拉，翻页 60 张一屏，「随机」抽一张。
-- 默认隐藏「性感系」（1040 条可见），勾「性感系」看到全部 1439 条。仅供个人学习与合法创作，版权归原作者 ギア(@giaaibusi)。
-- 想停用／卸载：设置页「插件」卡片里取消勾选或点删除；想换数据：替换 `plugins\pose_gallery\data\index.json` 与图片后点「重新加载」。
-- 插件格式（含本插件的 web 面板写法）见 `plugins\PLUGIN_FORMAT.md`。
-
-## 十一、ComfyUI 工作流插件（导入 api json 就能出图 / 出视频）
-
-同样是一个自带插件：`plugins\comfy_runner\`（代码 `plugin.py` + 面板 `web\panel.js`）。它把本机 ComfyUI 接进软件，**不用手改节点，导入工作流后自动认出该填哪里**。
-
-### 第一次用
-
-1. 启动 ComfyUI（默认 `http://127.0.0.1:8188`；改了端口就在设置页插件卡片里改 `comfy_url`）。
-2. 设置页 →「插件」卡片 → 找到 **ComfyUI 工作流** → 未信任时点「信任并加载」（代码插件默认不执行，这是安全门）。
-3. 回「提示词撰写」页，**右侧工具栏**多出「ComfyUI 工作流」标签，点进去，标题旁小圆点变绿＝已连上。
-
-### 导入工作流
-
-在 ComfyUI 里搭好流程 → 菜单 **工作流 → 导出（API）** → 得到 json → 面板「导入工作流」页，把 json 拖进去（或选文件 / 直接粘贴）。
-
-导入后自动检测并显示：
-
-| 检测项 | 说明 |
-| --- | --- |
-| 类型 | 视频（存在视频输出节点）或图片 |
-| 模式 | **优先读导演台节点的 `task_type`**（`MiniMaxH3Director` 等），支持 t2v 文生视频 / i2v 图生视频 / fl2v 首尾帧 / r2v 参考主体生视频 / v2v 视频转视频 / rv2v 参考素材改视频 / mixed 混合模式；没有导演节点时按 LoadImage 数量推断 t2v / i2v / fl2v / t2i / i2i |
-| 提示词 | 从采样器的 positive 往上追到真正存文字的节点（`CLIPTextEncode.text`、`PrimitiveStringMultiline.value` 等）；**也认复合节点**——MiniMax 导演台这类把提示词塞在 `timeline_data` JSON 串里的节点，会追到里面的 `segments[0].prompt`（面板里显示成 `1.timeline_data › segments[0].prompt`）；外部组模式（组节点 `MiniMaxH3DirectorGroupImageToVideo` / `GroupReferenceToVideo`）会取组节点的 `prompt`，因为外部组优先执行 |
-| 负向提示词 | 从 negative 追到的文本节点；复合节点内部的 `negativePrompt` 也认 |
-| 分辨率 | 空 latent 节点的 width/height（如 `EmptyLatentImage`、`WanImageToVideo`）；没有空 latent 节点时，取任意同时带数值 width/height 的节点（如 `MiniMaxH3Director`）、或缩放节点的 width/height；**都没有时给一个可改的虚拟分辨率**（默认 1024×1024，面板上标「（可改）」）——改它会在每张参考图后自动插一个 `ImageScale`，把图统一到填的尺寸 |
-| 像素 / 预设 | 分辨率下面还有两件：**预设**（图片 9 个、视频 10 个常用尺寸，下拉即填）与 **像素（MP）**——只填像素时按当前宽高比自动换算宽高（结果都是 8 的倍数，例如 2 MP → 1416×1416）；比例键 1:1 / 3:4 / 4:3 / 2:3 / 3:2 / 9:16 / 16:9 / 21:9 按当前像素换比例 |
-| 分辨率（比例型） | `ResolutionSelector` 这类节点不直接存宽高，而是「比例 + 百万像素 + 对齐倍数」——插件按它自己的算法先算出当前尺寸（例如 16:9 / 1 MP / 16 → 1360×768）；改分辨率时把最接近的比例与对应的百万像素写回去，真正的像素由 ComfyUI 按同样规则算出，生成结果里会显示「按比例算出 816×1232」这样的实际尺寸 |
-| 模型 | 认出 `unet_name` / `ckpt_name` / `clip_name` / `vae_name` / `lora_name` / `control_net_name` / `model_name` 这些可换的模型文件槽，面板里逐个给下拉；点「从 ComfyUI 拉模型列表」会调 `/object_info/<节点类型>` 取真实可选文件（ComfyUI 没启动时只剩工作流里的现值） |
-| LoRA | 扫 `lora_name` 节点（LoraLoader / LoraLoaderModelOnly 等），面板列出名称并给模型/文本两个强度输入框；没有就显示「这个工作流里没有 LoRA 节点」 |
-| 时长 | 视频类节点的帧数输入 + fps（`length`/`num_frames`/`total_frames`/`frames` 等）与 `frame_rate`/`frameRate`/`fps`，换算成秒 |
-| 参考图槽 | 沿导演节点的 `i2v_groups` / `r2v_groups` 追到 `GroupsCombine` → 各分组节点，列出「组1·首帧」「组1·参考图1」这类槽位；空槽会标「（未接图）」，生成时按上传顺序自动新建 `LoadImage` 补上 |
-| 参考图槽语义 | 裸 `LoadImage` 会带上它喂给的节点名（如「参考图1（TextEncodeQwenImage21）」），并在参考图槽下方列出「原有接图：…←portrait_model_denim.png」——一眼看出哪个槽是人物、哪个是衣服、哪个是场景 |
-| 提示词写在哪 | 面板提示词框下面会写「将写入：5.global_prompt」这类路径——插件只改这个字符串字段，不会把整段 json 当提示词。导演台的提示词在 json 里存两份（节点 `global_prompt` 和 `timeline_data.global.prompt`），插件写一处**会自动同步另一处**；时间轴有多段时只写第一段（提示会注明「共 N 段」） |
-| 参数 | 步数、cfg、采样器、调度器——**只展示，沿用工作流原值，不改** |
-
-认错的可以改：检测结果里给出所有文本位置的下拉（`节点号.字段 › JSON路径（节点类型，字数）`），选对再保存。文本位置不止一个时提示「共 N 个文本位置，保存前可改选」。
-写回复合节点时是**改 JSON 里的那一段**（解析 → 替换 `segments[0].prompt` → 写回整串），同时把时长/画幅同步进 `totalFrames`、`durationSec`、`width`、`height`，导演台内部的片段表与时间线不会和界面填报的数字打架。
-
-### 生成
-
-生成页：选工作流 → 填提示词 → 视频填时长/分辨率、图片填画幅 → 点生成。
-
-模式下拉会按工作流的实际情况给选项（导演台工作流给 t2v / i2v / fl2v / r2v / v2v / rv2v / mixed，普通工作流给 t2v / i2v / fl2v / t2i / i2i）；选哪个模式决定「要不要图、要几张」：i2v 一张首帧、fl2v 首尾两张、r2v 最多 9 张（提示词里用 `<Picture 1>`… 指代）、v2v 不用图（它要源视频，在 ComfyUI 里换 `VHS_LoadVideo` 的 video）、mixed 按段。
-
-提示词框上方有四个一键取用按钮（不用再手写/复制）：
-
-| 按钮 | 取哪里 |
-| --- | --- |
-| 取描述 | 左边「内容描述」里你写的那段大白话 |
-| 取结果 | 右边结果区当前显示的提示词（模型刚写出来的那份） |
-| 取历史 | 历史记录里最新的一条输出 |
-| 负向提示词 | 展开/收起负向提示词框 |
-
-- **只写你关心的**：提示词、负向、时长、分辨率、种子（留空＝工作流原值）；其余参数全部沿用工作流。
-- **模型与 LoRA**：参数区下面是「模型」块（每个模型槽一行下拉，选完写进提交的工作流，ComfyUI 端按你选的跑）与「LoRA」块（列出工作流里挂的 LoRA，可改模型/文本强度；负数就是反向强度）。模型列表来自 ComfyUI 的 `/object_info`，没启动 ComfyUI 时只有工作流里原来的值。
-- **提示词开关会自动打开**：有些工作流（如 Qwen 2.1 图像编辑）把提示词接在一个 `ComfySwitchNode` 上，开关关着时走的是写死的兜底文案，面板里写的提示词就不生效。插件检测到这种接法会在生成时自动把开关打开，并在提示里写「打开提示词开关 459:484」。注意：打开后提示词会先过工作流里的 PE（提示词增强）模型再进采样，所以面板里写一句简短需求即可；想原样直出就自己在 ComfyUI 里把开关关掉或改接线。
-- **结果在哪看**：生成完直接在面板结果区里显示——图片显示缩略图、点一下开大图；视频带播放控件可直接播放。产物同时落盘到 `data\plugins\comfy_runner\out\<prompt_id>\`，ComfyUI 清了队列也还在；每个产物右侧有「存为参考图」（图片才显示）与「下载」。
-- **保存改动**：导入时存下的是你导出的**原样 json**。之后在面板里改的模型 / LoRA 强度 / 分辨率（含 MP、比例）/ 时长 / 种子，点「保存这些改动」会写回这份工作流（`data\plugins\comfy_runner\wf\<id>.json`），下次导入同一份或直接再生成都用新值；勾上「生成后自动保存」则每次出图成功后自动写回（提示词不改，避免把临时试写的内容固化）。写回后提示行会列出「已保存：分辨率 832×1216、种子、模型×1」这样的清单。
-- **提示词怎么进去**：导入页只收 ComfyUI 导出的 **API json**（工作流 → 导出（API）），提示词不要在那页粘。到「生成」页点「取结果」/「取描述」/「取历史」把 PM 写好的提示词一键带进来，生成时插件把它写进工作流识别到的那个字段。
-- **像素与预设**：分辨率区有三条入口——「预设…」下拉（图片 9 个 / 视频 10 个常用尺寸，选完宽高自动填）；宽 × 高两个数字框填具体像素；「像素」格填百万像素（MP），按当前比例自动换算宽高（都是 8 的倍数，例如 2 → 1416×1416）。下面一排比例键 1:1 / 3:4 / 4:3 / 2:3 / 3:2 / 9:16 / 16:9 / 21:9 会按当前像素换比例。三者联动，改完下方小字会显示「2.01 MP · 比例 1.00（1416×1416）」供确认。
-
-- **分辨率为什么能改**：工作流里有分辨率节点就直接改那个节点；没有（比如尺寸由输入图决定的洗图工作流）就在每张参考图后插一个缩放节点，统一到填的尺寸——缩放方式是 lanczos 拉伸、不裁切，图会变形，需要保比例就自己算好宽高。
-- **参考图**：模式需要图时（i2v / fl2v / r2v / rv2v / mixed / i2i），软件里已加的参考图会按上传顺序上传进 ComfyUI，依次填进检测到的参考图槽（「组1·首帧 → 组1·尾帧 → 组2·参考图1…」）；槽位没接 `LoadImage` 的，自动新建一个填进去。面板的「参考图槽」一行会写清上传顺序。
-- **进度与结果**：提交后每 2 秒查一次，出图直接显示（视频可播放），每个产物带「存为参考图」和一键下载。
-- 出错时给中文原因：连不上会说「请先启动 ComfyUI」，ComfyUI 拒单会把它的报错原文前 600 字贴出来。
-
-### 说明
-
-- 工作流存在 `data\plugins\comfy_runner\`（`workflows.json` 索引 + `wf\*.json` 原文），删软件里的条目不影响 ComfyUI 那边的原文件。
-- 检测是启发式：认不出来会在黄色提示里写明缺哪项，手动指定即可；工作流改了结构就重新导入一份。
-- 视口产物经插件接口代理（`/api/plugin/comfy_runner/view?...`）直接返回真实图片/视频字节（本地缓存优先），所以不需要另外开 ComfyUI 的网页。
-- 端到端自检：`python test_comfy_plugin.py`（自带假 ComfyUI，147 项，真实工作流导入＋复合节点检测＋导演台 7 模式识别＋参考图槽回填＋提示词开关＋模型/LoRA 写回＋组图＋提交＋轮询＋取产物）；保存改动单独一项：`python tools\test_persist.py`（18 项，改模型/分辨率/种子 → 写回 json → 磁盘复查 → 再生成用新值）。
-
+- 
 ## 十二、常见问题
 
 
@@ -354,7 +270,7 @@ def register(ctx):
 - **ComfyUI 插件认不出提示词在哪**：先在导入结果里看黄色提示；把「正向提示词」下拉改成 `1.timeline_data › segments[0].prompt` 这类复合节点路径再保存即可。
 - **API Key 安全**：明文存在本机 `data\config.json`，界面只显示后 4 位，接口不返回明文。
 
-## 十三、安装包（给别人装）
+## 十三、安装
 
 两种形态，内容完全一样（程序 + 内置模型 + 6 套运行环境包，装完 6.07 GB / 7930 个文件）：
 
@@ -382,38 +298,6 @@ PromptStudioSetup.exe --silent --dir "D:\Tools\PromptStudio" --no-desktop --no-m
 
 重新构建安装包：`python build_installer.py --onedir`（目录版）或 `python build_installer.py`（单文件版），
 前置条件是 `dist\PromptStudio\` 已由 `build_all.py` 生成；安装器本身不压缩（模型是高熵 gguf，deflate 只多花时间）。
-
-## 十四、从源码运行 / 发布到 GitHub
-
-**仓库里装什么**：只有源码（约 1 MB、95 个文件）。`dist\`（绿色版 6 GB）、`build\`、`models\`（约 4 GB 的 gguf）、`runtime\`（1.3 GB 预编译 llama.cpp）、`data\`（你的配置与历史）都不入库，见 `.gitignore`。
-
-**从源码跑起来**（不装 exe 也能用）：
-
-```powershell
-git clone https://github.com/<你的用户名>/prompt-studio.git
-cd prompt-studio
-python -m pip install -r requirements.txt
-
-python src\app.py          # 只跑网页版 → 浏览器开 http://127.0.0.1:8760
-python src\desktop.py      # 桌面版（和 exe 同样的窗口）
-```
-
-- 网页版需要自己准备模型服务：安装后到「设置 → 模型服务」填任意 OpenAI 兼容地址（云端 API 或本机 llama.cpp / Ollama）。
-- 想用内置本地模型：把 `.gguf` 放进 `models\gemma-4-e2b\`，再在设置页把四个路径指过去（每个路径右边有「浏览…」）。
-- 想用内置运行环境：从 llama.cpp 的 release 页面下载 `llama-b*` 压缩包放进 `runtime\packs\`，程序会按显卡自动挑（CPU 版放 `cpu-x64` 那个）。
-
-**发布物怎么给用户**：源码走仓库，二进制走 Releases。
-
-```powershell
-python tools\release_pack.py          # → dist\release\：源码 zip + 安装器 + 4 个 payload 分卷 + SHA256SUMS.txt + 合并并安装.bat
-gh release create v1.1.0 dist\release\* --title "PromptStudio 1.1.0" --notes-file ReleaseNotes.md
-```
-
-安装包 6.1 GB，超过 GitHub 单文件 2 GB 上限，所以 `release_pack.py` 按 1.6 GiB 切成 4 卷；用户把 1 个 exe + 4 个 part 放同一目录，双击 `合并并安装.bat` 就会合卷并启动安装器。
-
-完整步骤（含建仓、token、tag、以后每次更新）见 **[RELEASING.md](RELEASING.md)**。
-
-**许可**：见 [LICENSE](LICENSE)——可以免费用、改、写插件、再分发，但不能商用（销售 / 付费分发 / SaaS 收费 / 企业内部生产使用需单独授权）。
 
 **本仓库不包含**的两个自制插件：`plugins\pose_gallery`（姿势库）与 `plugins\comfy_runner`（ComfyUI 工作流）。要自己写插件，看 `plugins\PLUGIN_FORMAT.md`，或参考 `plugins\sample_generic`、`plugins\sample_tools`。
 
