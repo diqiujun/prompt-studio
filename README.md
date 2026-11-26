@@ -2,6 +2,8 @@
 
 **发布者：minut　版本：1.1**
 
+> 仓库：https://github.com/diqiujun/prompt-studio ｜ 下载安装包：[Releases](https://github.com/diqiujun/prompt-studio/releases)
+
 一句话需求 → 自动改写成各类模型的规范提示词；内置官方规范全文，支持中英互译。
 桌面程序，双击即用：原生窗口 + 内置本地模型（免 key、免联网也能跑），整个目录拷到别的 Windows 电脑上直接可用。
 
