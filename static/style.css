@@ -299,14 +299,18 @@ html[data-theme="light"] .card, html[data-theme="light"] .out, html[data-theme="
 .posePager{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
 .posePager .mini{color:var(--fg3)}
 
-/* ---------- 右侧工具栏（插件侧边栏：姿势库 / ComfyUI 工作流 …） ---------- */
+/* ---------- 右侧工具栏（插件侧边栏：姿势库 / ComfyUI 工作流 …） ----------
+   侧栏是 position:fixed 的独立滚动层，QtWebEngine 下容易被上层重绘带着一起刷
+   （表现为侧栏闪一下）。这里把它提升成独立合成层并隔离绘制，避免被牵连重绘。 */
 .sbar{position:fixed;top:57px;right:0;bottom:0;width:392px;display:none;flex-direction:column;
   background:var(--bg2);border-left:1px solid var(--line);z-index:40;
-  box-shadow:-10px 0 28px rgba(0,0,0,.10)}
+  transform:translateZ(0);will-change:transform;backface-visibility:hidden;
+  contain:layout style paint;isolation:isolate}
 body.sbar-on .sbar{display:flex}
 body.sbar-on main{padding-right:412px;max-width:none}
 body.sbar-on .foot{padding-right:412px}
-.sbarHead{display:flex;align-items:center;gap:8px;padding:10px 10px 9px;border-bottom:1px solid var(--line);background:var(--hdr)}
+.sbarHead{display:flex;align-items:center;gap:8px;padding:10px 10px 9px;border-bottom:1px solid var(--line);background:var(--hdr);
+  transform:translateZ(0)}
 .sbarTabs{display:flex;gap:6px;overflow-x:auto;flex:1 1 auto;scrollbar-width:thin}
 .sbarTab{white-space:nowrap;background:var(--bg3);border:1px solid var(--line);color:var(--fg2);
   border-radius:8px;padding:5px 11px;font-size:12px;flex:0 0 auto}
@@ -315,7 +319,9 @@ body.sbar-on .foot{padding-right:412px}
 .sbarBtn{background:var(--bg3);border:1px solid var(--line);color:var(--fg2);border-radius:8px;
   padding:4px 9px;font-size:12px;line-height:1.4}
 .sbarBtn:hover{color:var(--fg);border-color:var(--fg3)}
-.sbarBody{flex:1 1 auto;overflow:auto;overflow-x:hidden;padding:12px}
+.sbarBody{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:12px;
+  background:var(--bg2);overscroll-behavior:contain;contain:content;
+  scrollbar-gutter:stable}
 .sbarBody *{min-width:0}
 .sbarBody .pp-panel{margin:0;padding:0;border:0;background:none;box-shadow:none;overflow-x:hidden}
 .sbarBody .pp-panel[hidden]{display:none}

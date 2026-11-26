@@ -12,6 +12,7 @@ _prev_app*/
 # ---- 私有插件与素材（不随源码发布）----
 /plugins/pose_gallery/
 /plugins/comfy_runner/
+/plugins/sketch2img/
 
 # ---- 临时脚本（开发过程中的一次性补丁）----
 /tmp_*.py

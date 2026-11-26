@@ -57,8 +57,11 @@ def _setup_webengine_env() -> None:
     if os.path.isdir(loc) and not os.environ.get("QTWEBENGINE_LOCALES_PATH"):
         os.environ["QTWEBENGINE_LOCALES_PATH"] = loc
     # 打包环境里 Chromium 的沙箱与 GPU 常因权限报错，本地回环页面用不到，直接关掉更稳。
+    # CalculateNativeWinOcclusion：Windows 会把「被遮挡」的窗口暂停渲染，恢复时整页重绘一次，
+    # 表现就是「切回来闪一下」——本地小工具不需要这个优化，关掉更稳。
     flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "").strip()
-    for f in ("--no-sandbox", "--disable-gpu-sandbox"):
+    for f in ("--no-sandbox", "--disable-gpu-sandbox",
+              "--disable-features=CalculateNativeWinOcclusion"):
         if f not in flags:
             flags = (flags + " " + f).strip()
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = flags
@@ -433,6 +436,14 @@ class Main(QMainWindow):
         m_help.addAction("打开本地模型日志", self.open_model_log)
         m_help.addAction("关于", self.about)
 
+        # WebEngine 默认底色是白的：页面首帧、重绘间隙、滚动合成时若露底就会「闪一下白」。
+        # 这里把页面底色设成和界面同色，任何间隙都看不见闪。
+        try:
+            self.view.page().setBackgroundColor(QColor("#0f1318"))
+        except Exception:
+            pass
+        self._revealed = False
+        self.view.loadFinished.connect(lambda _ok: self._reveal())
         self.view.load(QUrl(url))
         self._theme = None
         try:
@@ -452,6 +463,24 @@ class Main(QMainWindow):
                 origin, feature, QWebEnginePage.PermissionPolicy.PermissionGranted)
         except Exception:
             pass
+
+    # ---------------- 显示时机（页面画完首帧再露窗口，避免启动那一下空白闪烁）
+    def _reveal(self):
+        if getattr(self, "_revealed", False):
+            return
+        self._revealed = True
+        self.show()
+        sp = getattr(self, "_splash", None)
+        if sp is not None:
+            self._splash = None
+            try:
+                sp.fade_out(lambda: (sp.close(),
+                                     _runlog("桌面窗口已打开 %s（端口 %d）" % (self.url, self.port))))
+            except Exception:
+                try:
+                    sp.close()
+                except Exception:
+                    pass
 
     # ---------------- 外观（菜单栏 / 状态栏跟网页主题一起变）
     def apply_theme(self, theme: str):
@@ -479,8 +508,11 @@ class Main(QMainWindow):
                        if gpu else "无 NVIDIA 显卡")
             run = st.get("running")
             txt = "本地模型：● 运行中（pid %s）" % st.get("pid") if run else "本地模型：○ 未启动"
-            self.lbl_model.setText(txt)
-            self.lbl_hw.setText("%s · %s" % (gpu_txt, hw.get("note") or ""))
+            if self.lbl_model.text() != txt:          # 只在文字真变时 setText：避免每 4 秒无谓重排
+                self.lbl_model.setText(txt)
+            hw_txt = "%s · %s" % (gpu_txt, hw.get("note") or "")
+            if self.lbl_hw.text() != hw_txt:
+                self.lbl_hw.setText(hw_txt)
         except Exception:
             pass
 
@@ -590,8 +622,9 @@ def boot() -> int:
     threading.Thread(target=backend._autostart_local, name="local-autostart", daemon=True).start()
 
     win = Main(url, port)
-    win.show()
-    splash.fade_out(lambda: (splash.close(), _runlog("桌面窗口已打开 %s（端口 %d）" % (url, port))))
+    win._splash = splash
+    # 正常靠 loadFinished 触发显示；页面万一加载失败，3 秒后也先显示出来（不卡在启动页）
+    QTimer.singleShot(3000, win._reveal)
     print("[desktop] 桌面窗口已打开 %s（端口 %d）" % (url, port), flush=True)
     return qapp.exec()
 
