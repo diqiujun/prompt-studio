@@ -1,0 +1,8 @@
+# PromptStudio 运行依赖（Python 3.12+，实测 3.14.6）
+# 只跑网页版：flask + requests 就够
+# 跑桌面版（exe 同款窗口）：再加 PyQt6 与 PyQt6-WebEngine
+flask>=3.0
+requests>=2.31
+Pillow>=10.0
+PyQt6>=6.6
+PyQt6-WebEngine>=6.6

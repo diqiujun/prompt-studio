@@ -383,5 +383,39 @@ PromptStudioSetup.exe --silent --dir "D:\Tools\PromptStudio" --no-desktop --no-m
 重新构建安装包：`python build_installer.py --onedir`（目录版）或 `python build_installer.py`（单文件版），
 前置条件是 `dist\PromptStudio\` 已由 `build_all.py` 生成；安装器本身不压缩（模型是高熵 gguf，deflate 只多花时间）。
 
+## 十四、从源码运行 / 发布到 GitHub
+
+**仓库里装什么**：只有源码（约 1 MB、95 个文件）。`dist\`（绿色版 6 GB）、`build\`、`models\`（约 4 GB 的 gguf）、`runtime\`（1.3 GB 预编译 llama.cpp）、`data\`（你的配置与历史）都不入库，见 `.gitignore`。
+
+**从源码跑起来**（不装 exe 也能用）：
+
+```powershell
+git clone https://github.com/<你的用户名>/prompt-studio.git
+cd prompt-studio
+python -m pip install -r requirements.txt
+
+python src\app.py          # 只跑网页版 → 浏览器开 http://127.0.0.1:8760
+python src\desktop.py      # 桌面版（和 exe 同样的窗口）
+```
+
+- 网页版需要自己准备模型服务：安装后到「设置 → 模型服务」填任意 OpenAI 兼容地址（云端 API 或本机 llama.cpp / Ollama）。
+- 想用内置本地模型：把 `.gguf` 放进 `models\gemma-4-e2b\`，再在设置页把四个路径指过去（每个路径右边有「浏览…」）。
+- 想用内置运行环境：从 llama.cpp 的 release 页面下载 `llama-b*` 压缩包放进 `runtime\packs\`，程序会按显卡自动挑（CPU 版放 `cpu-x64` 那个）。
+
+**发布物怎么给用户**：源码走仓库，二进制走 Releases。
+
+```powershell
+python tools\release_pack.py          # → dist\release\：源码 zip + 安装器 + 4 个 payload 分卷 + SHA256SUMS.txt + 合并并安装.bat
+gh release create v1.1.0 dist\release\* --title "PromptStudio 1.1.0" --notes-file ReleaseNotes.md
+```
+
+安装包 6.1 GB，超过 GitHub 单文件 2 GB 上限，所以 `release_pack.py` 按 1.6 GiB 切成 4 卷；用户把 1 个 exe + 4 个 part 放同一目录，双击 `合并并安装.bat` 就会合卷并启动安装器。
+
+完整步骤（含建仓、token、tag、以后每次更新）见 **[RELEASING.md](RELEASING.md)**。
+
+**许可**：见 [LICENSE](LICENSE)——可以免费用、改、写插件、再分发，但不能商用（销售 / 付费分发 / SaaS 收费 / 企业内部生产使用需单独授权）。
+
+**本仓库不包含**的两个自制插件：`plugins\pose_gallery`（姿势库）与 `plugins\comfy_runner`（ComfyUI 工作流）。要自己写插件，看 `plugins\PLUGIN_FORMAT.md`，或参考 `plugins\sample_generic`、`plugins\sample_tools`。
+
 
 
