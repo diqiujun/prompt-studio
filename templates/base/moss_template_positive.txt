@@ -1,0 +1,23 @@
+moss-image 正向提示词模板（顺序固定，花括号处填空；high detail, 8K quality 保留）
+
+{subject}, {action/pose} in/inside {scene/location}, wearing {outfit}, {expression/emotion}, {safe/stable state}; {key visible details: props/equipment/environment elements}; {composition/shot type}, {lighting}, {photography/art style}, high detail, 8K quality, {depth of field}, {color style}.
+
+组装约定（源示例 行 131 的实测口径）：
+- 固定质量词 high detail, 8K quality 原样保留，不译不删；
+- 连接词 wearing 照抄保留（源示例保留英文 wearing）；in/inside 允许融进目标语言子句（源示例写作「在室内摄影工作室整理相机」，字面未出现 in/inside）；
+- 分隔符按模板：槽位之间逗号，安全状态之后与道具组之后各一个分号；
+- 槽位内容用用户的语言，风格词与专有名词照抄。
+
+默认值速查（缺失时填入）：
+subject = 单人主体（缺失需先追问）
+action/pose = 自然站立 / 稳定操作
+scene/location = 整洁安全的室内环境
+outfit = 简洁合身服装
+expression/emotion = 平静、专注
+safe/stable state = 环境整洁安全、设备稳定、无危险动作、无明火烟雾（必须显式可观察）
+key visible details = 2–4 个低风险元素
+composition/shot type = 中景，主体居中构图
+lighting = 柔和自然光
+photography/art style = 写实摄影风格
+depth of field = 浅景深
+color style = 自然低饱和

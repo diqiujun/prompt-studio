@@ -1,0 +1,37 @@
+# ---- 构建产物（体积大，不入库）----
+/dist/
+/dist_dbg/
+/build/
+/runtime/
+/models/
+/data/
+/work/
+*_dbg/
+_prev_app*/
+
+# ---- 私有插件与素材（不随源码发布）----
+/plugins/pose_gallery/
+/plugins/comfy_runner/
+
+# ---- 临时脚本（开发过程中的一次性补丁）----
+/tmp_*.py
+/_tmp_*.py
+/tools/strip_*.py
+
+# ---- Python / PyInstaller 残留 ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.spec.bak
+/tools/*.exe
+/tools/*.dll
+/tools/pyi/
+*.log
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*.swp

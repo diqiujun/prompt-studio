@@ -1,0 +1,5 @@
+﻿b = open(".gitignore","rb").read()
+print("bytes:", len(b))
+print("BOM:", b[:3] == b"\xef\xbb\xbf")
+print("CRLF count:", b.count(b"\r\n"), "LF count:", b.count(b"\n"))
+print("first 120 repr:", b[:120])

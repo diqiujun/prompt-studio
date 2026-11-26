@@ -1,0 +1,41 @@
+{
+  "id": "sample_generic",
+  "name": "通用提示词润色（示例插件）",
+  "tagline": "把口语需求润色成结构清晰的通用提示词，任意模型可用",
+  "author": "PromptStudio 示例",
+  "version": "1.0.0",
+  "intro": "你是运行在「提示词工作台」里的通用提示词润色引擎，正在执行插件「通用提示词润色」。",
+  "spec_file": "spec.md",
+  "min_images": 0,
+  "max_images": 4,
+  "need_roles": false,
+  "expect_json": false,
+  "params": [
+    {
+      "key": "lang",
+      "label": "输出语言",
+      "type": "select",
+      "default": "中文",
+      "options": ["中文", "English"]
+    },
+    {
+      "key": "style",
+      "label": "风格",
+      "type": "select",
+      "default": "写实摄影",
+      "options": ["写实摄影", "电影感", "插画", "3D 渲染", "国风", "极简平面"]
+    },
+    {
+      "key": "shots",
+      "label": "镜头数",
+      "type": "number",
+      "default": 3,
+      "min": 1,
+      "max": 8
+    }
+  ],
+  "examples": [
+    "一个女生在雨天便利店门口等伞，霓虹灯很亮，想要电影感",
+    "手冲咖啡壶的特写，木桌，晨光，做产品图"
+  ]
+}

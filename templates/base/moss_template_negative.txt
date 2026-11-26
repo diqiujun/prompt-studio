@@ -1,0 +1,21 @@
+moss-image 负向提示词模板（通用段整串照抄，末尾接场景段）
+
+crash, accident, smoke, fire, explosion, wreckage, blood, horror, distorted figure, deformed hands, extra limbs, low resolution, blurry, overexposed, cartoon style, text, watermark, logo, {scene-specific negatives}.
+
+通用段 18 项固定（源行 52 / 行 72 两处一致）：
+crash, accident, smoke, fire, explosion, wreckage, blood, horror, distorted figure, deformed hands, extra limbs, low resolution, blurry, overexposed, cartoon style, text, watermark, logo
+
+场景段（可叠加）：
+室内 = messy cables, broken furniture, dark corners, cluttered background
+户外 = dangerous traffic, collapsed structures, heavy smoke, unsafe crowd
+人物 = twisted fingers, asymmetric eyes, bad anatomy, floating limbs
+产品 = deformed product, broken packaging, wrong text, duplicate object
+建筑 = leaning walls, cracked structure, unsafe scaffolding
+
+冲突检查：负向串内不得出现正向主体或必要道具的裸名词。需约束该道具时写成 deformed X / duplicate X 形式。
+取舍：场景组内与正向内容明显冗余的项可省（源示例室内组 4 项只取 3 项，省略 dark corners）；通用段 18 项一项不得少。
+
+MOSS-Image 条件门禁（2026-11-20 增补，官方依据见 references/official-moss-spec.md）：
+1) 正向含要渲染的可见文字（引号逐字）→ 删 text，并在正向文字清单末尾补 with no other text 收口。
+2) 正向风格为动漫 / 卡通 / 插画 / 海报设计 → 删 cartoon style。
+3) 门禁只作用于本次产出的这一条负向串；其余 16 项与 watermark、logo 照旧保留。触发时在 warnings 记一行说明删了哪项、为什么。

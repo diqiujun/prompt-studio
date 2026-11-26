@@ -1,0 +1,24 @@
+{
+  "id": "sample_tools",
+  "name": "示例代码插件 · 文本整理与统计",
+  "tagline": "演示代码插件：注册工具按钮、设置项、后端接口与 generate.after 钩子",
+  "author": "PromptStudio",
+  "version": "1.0.0",
+  "entry": "plugin.py",
+  "description": "纯代码插件（没有 spec.md），加载后会在「提示词撰写」页出现一个「整理文本」工具按钮，并注册一个接口 /api/plugin/sample_tools/stats。",
+  "settings": [
+    {
+      "key": "strip_blank",
+      "label": "去掉多余空行",
+      "type": "checkbox",
+      "default": true
+    },
+    {
+      "key": "prefix",
+      "label": "整理后的提示前缀",
+      "type": "text",
+      "default": "",
+      "placeholder": "留空则不加前缀"
+    }
+  ]
+}

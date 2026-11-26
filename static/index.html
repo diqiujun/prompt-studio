@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>提示词工作台 · Prompt Studio</title>
+<script>
+/* 主题先于样式生效，避免闪白 */
+(function () {
+  var t = "dark";
+  try { t = localStorage.getItem("ps-theme") || "dark"; } catch (e) {}
+  var m = /[?&]theme=(light|dark)\b/.exec(location.search);
+  if (m) { t = m[1]; try { localStorage.setItem("ps-theme", t); } catch (e) {} }
+  document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+})();
+</script>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><img class="brandLogo" src="/static/logo-256.png" alt="Pm">提示词工作台<small>Prompt Studio · 本地 · 发布者 minut</small></div>
+  <div class="hspace"></div>
+  <div class="hctl">
+    <div class="themeSeg" id="themeSeg" title="界面配色">
+      <button data-theme="dark" class="on">☾ 深色</button>
+      <button data-theme="light">☀ 浅色</button>
+    </div>
+    <select id="provider" title="当前使用的模型服务"></select>
+    <div class="switch" id="fastWrap" title="快速模式：精简模板注入；DeepSeek 系关闭思考链，直接出结果">
+      <div class="toggle on" id="fastToggle"></div><span>快速模式</span>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <button data-tab="prompt" class="on">提示词撰写</button>
+  <button data-tab="translate">翻译</button>
+  <button data-tab="history">历史</button>
+  <button data-tab="settings">设置</button>
+</nav>
+
+<main>
+  <!-- ============ 右侧工具栏（插件侧边栏：姿势库 / ComfyUI 工作流等） ============ -->
+  <aside id="sbar" class="sbar">
+    <div class="sbarHead">
+      <div class="sbarTabs" id="sbarTabs"></div>
+      <button class="sbarBtn" id="sbarFold" title="收起工具栏">⟩</button>
+    </div>
+    <div class="sbarBody" id="sbarBody"></div>
+  </aside>
+  <button class="sbarOpen" id="sbarOpen" title="展开工具栏">⟨ 工具</button>
+  <!-- ============ 提示词 ============ -->
+  <section id="tab-prompt">
+    <div class="card" style="margin-bottom:14px">
+      <h3>目标模型（内置该模型的官方规范与实测模板）</h3>
+      <div class="tpls" id="tplPicker"></div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <div class="card" style="margin-bottom:14px">
+          <h3>内容描述 — 用大白话说想要什么，程序自动改写成规范提示词</h3>
+          <div class="taWrap">
+            <textarea id="content" rows="9" placeholder="例：沈不违提刀走进雪夜山门，镜头从他的靴子慢慢上摇到脸，呼出的白气，刀刃上有雪粒反光，最后一句台词「都让开」。"></textarea>
+            <div class="mention" id="mention"></div>
+          </div>
+          <div class="chips" id="imgChips"></div>
+          <div class="field" style="margin-top:10px">
+            <label>生成参数</label>
+            <div class="row" id="paramRow"></div>
+          </div>
+          <div class="row">
+            <div class="col">
+              <button class="btn pri" id="go">生成提示词</button>
+            </div>
+            <div class="col">
+              <button class="btn" id="clear">清空</button>
+            </div>
+          </div>
+          <div class="field" style="margin-top:10px">
+            <label>参考图（可选，可上传并标注每张图的角色；支持拖放 / Ctrl+V 粘贴）</label>
+            <div class="drop" id="drop">点击选择图片，或把图片拖进来 · Ctrl+V 粘贴</div>
+            <input type="file" id="file" accept="image/*" multiple style="display:none">
+            <div class="imgs" id="imgs" style="margin-top:10px"></div>
+          </div>
+          <!-- 插件自带面板（已启用并信任的插件把界面挂到这里） -->
+          <div id="pluginPanels"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="out">
+          <div class="meta" id="meta"><span>未生成</span></div>
+          <div class="bar" id="bar"><i></i></div>
+          <div class="ptools" id="pluginTools"></div>
+          <div id="result"><p class="hint">结果显示在这里。左侧写好描述，点「生成提示词」。</p></div>
+          <div class="field" style="margin-top:12px">
+            <label>对上一版不满意？写要求，自动迭代重做（不用重写描述）</label>
+            <div class="row">
+              <div class="col" style="flex:4"><input id="feedback" placeholder="例：镜头太多压成两个 Shot；不要字幕感；把打斗压缩到 6 秒内；台词留中文"></div>
+              <div class="col"><button class="btn" id="iterate">再改一版</button></div>
+            </div>
+          </div>
+          <div class="mini">输出可整块复制，也可导出为 .md 文件（H3 交付格式）。生成记录自动存本地。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 翻译 ============ -->
+  <section id="tab-translate" style="display:none">
+    <div class="card" style="margin-bottom:14px">
+      <h3>翻译模式</h3>
+      <div class="tpls" id="trPicker"></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="field"><label>原文</label>
+          <textarea id="trText" rows="12" placeholder="粘贴要翻译的文本 / 中文提示词 / 整段 JSON 提示词"></textarea></div>
+        <div class="field"><label>术语表（每行 原文=译文，强制采用）</label>
+          <textarea id="trGlossary" rows="4" placeholder="沈不违=Shen Buwei&#10;人元丹=Renyuan Pill&#10;灭山之夜=the Night the Mountain Was Burned"></textarea></div>
+        <div class="row" id="trParamRow"></div>
+        <div style="margin-top:12px"><button class="btn pri" id="trGo">翻译</button>
+          <button class="btn" id="trSwap" title="把译文搬到原文框，方便反向再走一遍">译文 → 原文</button></div>
+      </div>
+      <div class="out">
+        <div class="meta" id="trMeta"><span>未翻译</span></div>
+        <div class="bar" id="trBar"><i></i></div>
+        <div id="trResult"><p class="hint">译文显示在这里。</p></div>
+        <div class="mini" style="margin-top:10px">「提示词互译」会保护字段名与标签（&lt;Subject 1&gt;、[Shot 1]、(S1)、&lt;d&gt;&lt;/d&gt;、wh_ratio…）不被翻译破坏，JSON 结构原样保留。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 历史 ============ -->
+  <section id="tab-history" style="display:none">
+    <div class="card">
+      <h3>本地历史记录（保存在程序目录 data\history.json，最近 200 条）</h3>
+      <div style="margin-bottom:12px"><button class="btn sm" id="histReload">刷新</button>
+        <button class="btn sm danger" id="histClear">清空历史</button></div>
+      <div id="histList"><p class="hint">暂无记录。</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 设置 ============ -->
+  <section id="tab-settings" style="display:none">
+    <div class="card" style="margin-bottom:14px">
+      <h3>插件（提示词模板 + 代码插件：能注册工具按钮、设置项、后端接口）</h3>
+      <p class="hint" style="margin-top:0">一个插件 = <code>plugins\你的插件\plugin.json</code>，可选 <code>spec.md</code>（规范正文）+ <code>plugin.py</code>（代码，需你点「信任并加载」才会执行）。<b>模板插件</b>放进去就以一张新卡片出现在「提示词撰写」；<b>代码插件</b>还能注册<b>工具按钮</b>（作用于当前结果）、<b>设置项</b>、<b>后端接口</b> <code>/api/plugin/&lt;id&gt;/…</code>，也能挂 <code>generate.after</code> 钩子改写输出。格式说明见 <code>plugins\README.md</code>，自带示例 <code>sample_generic</code>（纯模板）与 <code>sample_tools</code>（代码插件）。</p>
+      <div style="margin-bottom:6px">
+        <button class="btn sm" id="pluginReload">重新加载</button>
+        <button class="btn sm" id="pluginInstall">安装插件（zip）</button>
+        <button class="btn sm" id="pluginOpen">打开插件文件夹</button>
+        <input type="file" id="pluginZip" accept=".zip" style="display:none">
+        <span class="mini" id="pluginDir"></span>
+      </div>
+      <div id="pluginList"></div>
+      <!-- 插件自己的设置面板（mount=settings/both 的插件挂到这里） -->
+      <div id="pluginPanelsCfg"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h3>模型服务（OpenAI 兼容 API，可配置多家，也可全部用本地模型）</h3>
+      <p class="hint" style="margin-top:0">base_url 可写 <code>https://api.deepseek.com</code>、<code>https://api.deepseek.com/v1</code>、<code>http://127.0.0.1:1234/v1</code>（LM Studio）、<code>http://127.0.0.1:11434/v1</code>（Ollama）。程序会自动补 <code>/v1</code>。本地模型无需 key。勾选「支持看图」后，上传的参考图会真的喂给模型阅读。</p>
+      <div id="provList"></div>
+      <div style="margin-top:10px">
+        <button class="btn sm" id="addProv">添加服务</button>
+        <span class="mini">从预设快速添加：</span>
+        <span id="presetBtns"></span>
+      </div>
+      <div class="mini" style="margin-top:10px">配置文件：<span id="cfgPath"></span>（key 只存本地，不出本机，除发给你配置的模型服务）</div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h3>本地模型（内置 gemma-4-e2b：主模型 + 视觉投影 + MTP 草稿）</h3>
+      <p class="hint" style="margin-top:0">程序会自己拉起 <code>llama-server</code>，并自动注册成「本机模型 · gemma-4-e2b（内置）」，选它就能用，不需要 key、不联网。模型文件（2.96GB + 940MB）不放进 exe，只引用下面这几个路径。MTP 是投机解码加速的草稿层，默认关闭（该组合上开启有概率启动失败，失败会自动回退成不开）。</p>
+      <div class="row">
+        <div class="field"><label>llama.cpp 目录（里面有 llama-server.exe）</label>
+          <div class="pathrow"><input id="locDir" placeholder="E:\llama"><button class="btn sm locpick" data-for="locDir" data-mode="dir" title="选 llama-server.exe 所在目录">浏览…</button></div>
+        </div>
+        <div class="field"><label>端口</label><input id="locPort" type="number" style="width:110px"></div>
+        <div class="field"><label>上下文 ctx</label><input id="locCtx" type="number" style="width:120px"></div>
+        <div class="field"><label>GPU 层数 ngl</label><input id="locNgl" type="number" style="width:110px"></div>
+      </div>
+      <div class="field"><label>主模型 .gguf</label>
+        <div class="pathrow"><input id="locModel" placeholder="…\gemma-4-E2B-it-Q4_K_M.gguf"><button class="btn sm locpick" data-for="locModel" data-mode="file" data-filter="GGUF (*.gguf)" title="选主模型文件">浏览…</button></div>
+      </div>
+      <div class="field"><label>视觉投影 mmproj .gguf</label>
+        <div class="pathrow"><input id="locMmproj" placeholder="…\mmproj-F16.gguf"><button class="btn sm locpick" data-for="locMmproj" data-mode="file" data-filter="GGUF (*.gguf)" title="选视觉投影文件">浏览…</button></div>
+      </div>
+      <div class="field"><label>MTP 草稿 .gguf</label>
+        <div class="pathrow"><input id="locMtp" placeholder="…\mtp-gemma-4-E2B-it.gguf"><button class="btn sm locpick" data-for="locMtp" data-mode="file" data-filter="GGUF (*.gguf)" title="选 MTP 草稿文件">浏览…</button></div>
+      </div>
+      <div class="row" style="align-items:center;margin-top:4px">
+        <label class="chk"><input type="checkbox" id="locAuto"> 启动程序时自动拉起本地模型</label>
+        <label class="chk"><input type="checkbox" id="locAutoUnload"> 用时加载、生成完自动卸载（省显存）</label>
+        <label class="chk"><input type="checkbox" id="locMtpOn"> 启用 MTP 投机解码</label>
+        <label class="chk"><input type="checkbox" id="locEnabled"> 启用本地模型功能</label>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn sm" id="locSave">保存设置</button>
+        <button class="btn sm" id="locStart">启动本地模型</button>
+        <button class="btn sm danger" id="locStop">停止</button>
+        <button class="btn sm" id="locRefresh">刷新状态</button>
+        <span class="mini" id="locState">读取中…</span>
+      </div>
+      <div class="mini" id="locHint" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h3>运行环境（本地模型用的 llama.cpp，按硬件自动适配）</h3>
+      <p class="hint" style="margin-top:0">程序自带多套预编译运行包：NVIDIA CUDA 13.5 / 12.4、AMD ROCm 10.0、CPU 通用，分 x64 与 ARM64。首次启动自动检测系统架构与显卡（驱动支持的 CUDA 版本），挑一套解压到 <code>runtime\&lt;包名&gt;\</code>；没 N 卡走 CPU、AMD 卡走 ROCm。只支持 Windows。</p>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn sm" id="rtRefresh">刷新检测</button>
+        <button class="btn sm" id="rtInstall">按硬件安装 / 重装</button>
+        <span class="mini" id="rtState">读取中…</span>
+      </div>
+      <div class="mini" id="rtDetect" style="margin-top:8px"></div>
+      <div id="rtList" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h3>提示词规范（内置规范可启用 / 禁用 / 替换，可添加自己的规范）</h3>
+      <p class="hint" style="margin-top:0">关掉某条＝本次不注入该组件；「编辑替换」＝用你自己的内容顶掉官方原文（可一键恢复内置）；「＋ 添加规范」＝把你写的规范注入到该模板系统提示词末尾，并声明优先级高于内置规范。改动只写进 data\config.json 的 specs 段，templates\ 里的官方原文文件永不被改写。</p>
+      <div style="margin-top:10px">
+        <button class="btn sm" id="specResetAll">全部恢复默认</button>
+        <span class="mini" id="specCount"></span>
+      </div>
+      <div id="specMgr"></div>
+      <hr class="hr">
+      <h3>启动与打包</h3>
+      <div class="mini">
+        端口占用时程序自动顺延端口（默认 8760）。打包 exe：<code>pyinstaller build/promptstudio.spec</code>，产物在 <code>dist\PromptStudio\PromptStudio.exe</code>。
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="foot">
+  <span>发布者：<b>minut</b></span>
+  <span class="mini">提示词工作台 Prompt Studio · <span id="appVer">1.1</span> · 本地运行，数据不出本机</span>
+</footer>
+
+<div class="toast" id="toast"></div>
+<script src="/static/app.js"></script>
+  <!-- 自定义模型编辑器 -->
+  <div class="modal" id="tplEd">
+    <div class="modalBox">
+      <h3>添加自定义模型</h3>
+      <p class="hint">例：想写 FLUX 的提示词，就把 FLUX 的写法要求写进「规范正文」，之后它就和内置模板一样出现在模型列表里，选它、说需求、出提示词。</p>
+      <div class="ft" style="gap:10px;margin-top:10px">
+        <div class="col"><label>模型名称</label><input id="teName" placeholder="如 FLUX.1 文生图"></div>
+        <div class="col"><label>一句话简介</label><input id="teTag" placeholder="如 自然语言长句，重光影与镜头"></div>
+      </div>
+      <div class="col" style="margin-top:8px"><label>开场角色句（可留空，默认会按模型名称生成）</label>
+        <input id="teIntro" placeholder="如 你是 FLUX.1 的提示词工程师，把口语需求写成英文长句提示词。"></div>
+      <div class="col" style="margin-top:8px"><label>规范正文（必填：这里写清楚要模型怎么产出提示词）</label>
+        <textarea id="teSpec" rows="10" placeholder="例：&#10;1. 英文单段长句，不要分点；&#10;2. 顺序：主体 → 动作 → 环境 → 光线 → 材质 → 构图 → 镜头 → 风格；&#10;3. 光线必须写光位（左上方柔光箱 / 逆光轮廓）；&#10;4. 末尾加一行负面清单，以 'negatives:' 开头；&#10;5. 不要反问用户，缺信息按最合理方案补全。"></textarea></div>
+      <div class="col" style="margin-top:8px"><label>参数（每行一个：标签|类型|默认值|选项1,选项2；类型可用 select/number/text/textarea/canvas）</label>
+        <textarea id="teParams" rows="3" placeholder="画幅|canvas|1024x1024&#10;风格|select|电影感|电影感,二次元,产品图"></textarea></div>
+      <div class="col" style="margin-top:8px"><label>示例输入（每行一条，会显示在输入框占位提示里）</label>
+        <textarea id="teExamples" rows="2" placeholder="一个穿风衣的女人站在雨夜街头，霓虹反光"></textarea></div>
+      <div class="ft" style="gap:16px;margin-top:10px">
+        <label class="chk"><input type="checkbox" id="teJson">输出 JSON</label>
+        <div class="col" style="max-width:120px"><label>最少图</label><input id="teMinImg" type="number" value="0" min="0"></div>
+        <div class="col" style="max-width:120px"><label>最多图</label><input id="teMaxImg" type="number" value="4" min="0"></div>
+        <span class="spacer"></span>
+        <span class="mini err" id="teMsg"></span>
+        <button class="btn" id="teCancel">取消</button>
+        <button class="btn primary" id="teSave">保存并使用</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "positive_prompt": "",
+  "negative_prompt": "",
+  "slots": {
+    "subject": "",
+    "action_pose": "",
+    "scene_location": "",
+    "outfit": "",
+    "expression_emotion": "",
+    "safe_stable_state": "",
+    "key_visible_details": "",
+    "composition_shot_type": "",
+    "lighting": "",
+    "art_style": "",
+    "depth_of_field": "",
+    "color_style": ""
+  },
+  "scene_specific_negatives": [],
+  "canvas_size": { "width": 1024, "height": 1024 },
+  "layout_json": null,
+  "sampling_profile": { "steps": 50, "cfg": 3.0, "sampler": "Euler", "shift": 5.0, "slg_skip_layer": 22 },
+  "warnings": []
+}
