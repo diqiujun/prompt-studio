@@ -684,7 +684,7 @@ def install_zip(raw_bytes, name_hint=""):
     meta, err = _parse_manifest(str(root), True)
     if err:
         return {"ok": False, "error": err}
-    target = plugins_dir() / _slug(os.path.basename(meta["dir"]) or name_hint or meta["id"])
+    target = plugins_dir() / _slug(meta.get("id") or name_hint or os.path.basename(meta["dir"]))
     if target.exists():
         return {"ok": False, "error": "插件目录已存在：%s（先删掉或改名）" % target.name}
     shutil.copytree(root, target)
