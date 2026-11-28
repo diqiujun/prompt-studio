@@ -6,6 +6,7 @@ r"""给侧栏里的 ComfyUI 面板截图（headless Edge）。
 """
 import argparse
 import json
+import shutil
 import os
 import subprocess
 import sys
@@ -33,6 +34,8 @@ def main():
     ap.add_argument("--size", default="1500,1200")
     ap.add_argument("--sample", default="work\\workflows\\minimax_h3_director_api.json")
     ap.add_argument("--name", default="MiniMax 导演台")
+    ap.add_argument("--extra", default="", help="追加到 URL 的查询串，如 &allnodes=1")
+    ap.add_argument("--only", action="store_true", help="临时清空已导入的工作流，只留这一个（截图用，结束后恢复）")
     a = ap.parse_args()
 
     env = dict(os.environ)
@@ -42,6 +45,14 @@ def main():
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "src", "app.py")],
                            cwd=ROOT, env=env, creationflags=flags,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    bak = os.path.join(ROOT, "data", "_wf_bak")
+    src = os.path.join(ROOT, "data", "plugins", "comfy_runner")
+    moved = False
+    if a.only:
+        shutil.rmtree(bak, ignore_errors=True)
+        if os.path.exists(src):
+            shutil.move(src, bak)
+            moved = True
     try:
         for _ in range(60):
             try:
@@ -62,7 +73,7 @@ def main():
                "--user-data-dir=" + os.path.join(ROOT, "data", "_edge_sb"),
                "--window-size=%s,%s" % (w, h), "--virtual-time-budget=6000",
                "--screenshot=" + out,
-               "http://127.0.0.1:%d/?theme=%s&sbar=comfy_runner" % (PORT, a.theme)]
+               "http://127.0.0.1:%d/?theme=%s&sbar=comfy_runner%s" % (PORT, a.theme, a.extra)]
         subprocess.run(cmd, timeout=180, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print("shot:", out, os.path.getsize(out) if os.path.exists(out) else "MISSING")
     finally:
@@ -71,6 +82,9 @@ def main():
             srv.wait(timeout=10)
         except Exception:  # noqa: BLE001
             pass
+        if moved:
+            shutil.rmtree(src, ignore_errors=True)
+            shutil.move(bak, src)
     return 0
 
 

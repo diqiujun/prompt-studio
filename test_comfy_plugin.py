@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 LOG = os.path.join(ROOT, "data", "comfy_test.log")
-COMFY_PORT = int(os.environ.get("COMFY_PORT", "8188"))
+COMFY_PORT = int(os.environ.get("COMFY_PORT", "18188"))
 PM_PORT = int(os.environ.get("PM_PORT", "8798"))
 PM = "http://127.0.0.1:%d" % PM_PORT
 
@@ -96,6 +96,26 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/system_stats":
             return self._send_json({"devices": [{"name": "Fake RTX 5060 Ti", "vram_total": 17179869184,
                                                  "vram_free": 10737418240}]})
+        if p.startswith("/object_info/"):
+            cls = p.rsplit("/", 1)[-1]
+            if cls == "ResolutionSelector":
+                return self._send_json({cls: {"input": {"required": {
+                    "aspect_ratio": [["1:1 (Square)", "2:3 (Portrait Photo)", "3:2 (Photo)",
+                                      "3:4 (Portrait Standard)", "4:3 (Standard)",
+                                      "9:16 (Portrait Widescreen)", "16:9 (Widescreen)",
+                                      "21:9 (Ultrawide)"], {}],
+                    "megapixels": ["FLOAT", {"default": 1.0, "min": 0.1, "max": 16.0, "step": 0.1}],
+                    "multiple": ["INT", {"default": 8, "min": 8, "max": 128, "step": 8}],
+                }}, "output": ["INT", "INT"], "output_name": ["width", "height"]}})
+            if cls == "KSampler":
+                return self._send_json({cls: {"input": {"required": {
+                    "model": ["MODEL", {}],
+                    "seed": ["INT", {"default": 0, "min": 0, "max": 1 << 50, "step": 1}],
+                    "steps": ["INT", {"default": 20, "min": 1, "max": 10000, "step": 1}],
+                    "cfg": ["FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "step": 0.1}],
+                    "sampler_name": [["euler", "er_sde", "dpmpp_2m"], {}],
+                }}, "output": ["LATENT"], "output_name": ["LATENT"]}})
+            return self._send_json({"error": "no class " + cls}, 404)
         if p.startswith("/history/"):
             Handler.hist_hits += 1
             pid = p.rsplit("/", 1)[-1]
@@ -182,6 +202,10 @@ def main():
         # 信任（幂等）
         st, j = req("/api/plugins/trust", {"id": "comfy_runner"})
         ok("信任 comfy_runner", st == 200 and (j.get("ok") is not False), j.get("error", ""))
+        # 插件要连假 ComfyUI，而不是本机真跑着的那个（用户可能在用 ComfyUI）
+        st, j = req("/api/plugins/settings", {"id": "comfy_runner",
+                                             "values": {"comfy_url": "http://127.0.0.1:%d" % COMFY_PORT}})
+        ok("插件指向假 ComfyUI", st == 200 and (j.get("ok") is not False), str(j)[:120])
         st, j = req("/api/plugins/reload", {})
         st, j = req("/api/plugins")
         items = j.get("plugins") or j.get("items") or []
@@ -585,8 +609,9 @@ def main():
             qi = j.get("item") or {}
             qd = qi.get("detect") or {}
             rl = [x.get("label") for x in (qd.get("refs") or [])]
-            ok("认出 3 个参考图槽", len(rl) == 3, rl)
-            ok("槽位标签带语义", all("参考图" in str(x) and "TextEncode" in str(x) for x in rl), rl)
+            ok("多图槽补到上限 9 个", len(rl) == 9, rl)
+            ok("前三个槽已接图", all("TextEncode" in str(x) for x in rl[:3]), rl[:3])
+            ok("空槽标（空）", all("（空）" in str(x) for x in rl[3:]), rl[3:])
             sw = (qd.get("prompt") or {}).get("switch") or {}
             ok("认出提示词开关节点", sw.get("node") == "459:484", sw)
             ok("开关当前是关的", sw.get("on") is False, sw.get("on"))
@@ -595,7 +620,8 @@ def main():
             st, j = req("/api/plugin/comfy_runner/run", {
                 "id": qi.get("id"), "prompt": "多图测试 QWEN-MULTI-5",
                 "images": [{"name": "p1", "data_url": ref}, {"name": "p2", "data_url": ref},
-                           {"name": "p3", "data_url": ref}],
+                           {"name": "p3", "data_url": ref}, {"name": "p4", "data_url": ref},
+                           {"name": "p5", "data_url": ref}],
             })
             ok("多图 run 提交成功", j.get("ok") is True, j.get("error"))
             used = " ".join(j.get("used") or [])
@@ -607,6 +633,16 @@ def main():
                      for n in ("470", "475", "502")}
             ok("三张图各进一个 slot", all(str(v).startswith("pm_") for v in slots.values()), slots)
             ok("三张图互不相同", len(set(slots.values())) == 3, slots)
+            enc = (gp.get("459:474") or {}).get("inputs") or {}
+            new4 = enc.get("images.image_4")
+            new5 = enc.get("images.image_5")
+            ok("第 4 张图新建了 LoadImage 并接上", isinstance(new4, list) and len(new4) == 2, new4)
+            ok("第 5 张图同样接上", isinstance(new5, list) and len(new5) == 2, new5)
+            n4 = (gp.get(str(new4[0])) or {}).get("inputs") if isinstance(new4, list) else {}
+            n5 = (gp.get(str(new5[0])) or {}).get("inputs") if isinstance(new5, list) else {}
+            ok("新建的两个 LoadImage 各带一张上传图",
+               str((n4 or {}).get("image", "")).startswith("pm_")
+               and str((n5 or {}).get("image", "")).startswith("pm_"), [n4, n5])
         # == 11b. latent 开关：分辨率节点被旁路时改分辨率要能生效 ==
         out("\n== 11b. latent 开关（Qwen 2.1 Edit 原版） ==")
         qp2 = os.path.join(os.path.dirname(ROOT), "work", "workflows", "qwen_image_2_1_edit_api.json")
@@ -637,7 +673,115 @@ def main():
             ok("固定 latent 尺寸被写成 768×1344", (lat.get("width"), lat.get("height")) == (768, 1344),
                (lat.get("width"), lat.get("height")))
 
+        # == 12. 时间轴素材：参考图存在 timeline_data 里（没有 LoadImage） ==
+        out("\n== 12. 时间轴素材（导演台 r2v） ==")
+        u2 = os.path.join(os.path.dirname(ROOT), "work", "workflows", "unsaved2.json")
+        if os.path.exists(u2):
+            with open(u2, "r", encoding="utf-8") as f:
+                ug = json.load(f)
+            st, j = req("/api/plugin/comfy_runner/import", {"workflow": ug, "name": "时间轴多参"})
+            ok("导入时间轴多参工作流", j.get("ok") is True, j.get("error"))
+            uitem = j.get("item") or {}
+            ud = uitem.get("detect") or {}
+            ur = ud.get("refs") or []
+            ul = [x.get("label") for x in ur]
+            ok("时间轴槽补到上限 9 个", len(ur) == 9, ul)
+            ok("槽位标出段号与参考图", any(str(x).startswith("段1·参考图1") for x in ul), ul[:3])
+            ok("空槽标（空）", sum(1 for x in ul if "（空）" in str(x)) == 8, ul[:3])
+            ok("r2v 只留参考图槽（不列首尾帧）",
+               not any("首帧" in str(x) or "尾帧" in str(x) for x in ul), ul)
+            ok("note 说明写在时间轴里", "时间轴" in (ud.get("note") or ""),
+               (ud.get("note") or "")[-60:])
+
+            st, j = req("/api/plugin/comfy_runner/run", {
+                "id": uitem.get("id"), "prompt": "时间轴测试 TIMELINE-7",
+                "images": [{"name": "t1", "data_url": ref}],
+            })
+            ok("时间轴 run 提交成功", j.get("ok") is True, j.get("error"))
+            used3 = " ".join(j.get("used") or [])
+            ok("提示写进时间轴素材", "时间轴素材" in used3, used3[:160])
+            gu = (Fake.last_prompt or {}).get("prompt") or Fake.last_prompt or {}
+            tl_str = str((((gu.get("1") or {}).get("inputs") or {}).get("timeline_data")) or "")
+            fname = ""
+            try:
+                tlo = json.loads(tl_str)
+                fname = ((tlo.get("segments") or [{}])[0].get("refs") or [{}])[0].get("imageFile") or ""
+            except Exception:  # noqa: BLE001
+                pass
+            ok("参考图文件名写回 imageFile", str(fname).startswith("pm_"), fname)
+
+        # == 13. 全部节点：识别 + 读写 ==
+        out("\n== 13. 全部节点面板 ==")
+        mw = os.path.join(os.path.dirname(ROOT), "work", "workflows", "moss_image_t2i_api.json")
+        if os.path.exists(mw):
+            with open(mw, "r", encoding="utf-8") as f:
+                mg = json.load(f)
+            st, j = req("/api/plugin/comfy_runner/import", {"workflow": mg, "name": "MOSS 全节点"})
+            ok("导入 MOSS 工作流", j.get("ok") is True, j.get("error"))
+            mitem = j.get("item") or {}
+            mid = mitem.get("id")
+
+            st, j = req("/api/plugin/comfy_runner/nodes?id=%s" % urllib.parse.quote(str(mid)))
+            ok("nodes 接口通", j.get("ok") is True and st == 200, j.get("error"))
+            ok("节点数与原图一致", j.get("count") == len(mg), [j.get("count"), len(mg)])
+            ok("拿到 ComfyUI 官方定义（online≥2）", int(j.get("online") or 0) >= 2, j.get("online"))
+            ok("可改的输入够多", int(j.get("writable") or 0) > 10, j.get("writable"))
+            rows = j.get("nodes") or []
+            byid = {str(r.get("id")): r for r in rows}
+            rs = byid.get("19") or {}
+            ai = {i["name"]: i for i in (rs.get("inputs") or [])}
+            ok("节点 19 认出 ResolutionSelector", rs.get("class") == "ResolutionSelector", rs.get("class"))
+            ok("aspect_ratio 是下拉且 8 个选项",
+               (ai.get("aspect_ratio") or {}).get("type") == "combo"
+               and len((ai.get("aspect_ratio") or {}).get("options") or []) == 8,
+               (ai.get("aspect_ratio") or {}).get("type"))
+            ok("megapixels 是数字且带上限 16",
+               (ai.get("megapixels") or {}).get("type") == "number"
+               and (ai.get("megapixels") or {}).get("max") == 16.0, ai.get("megapixels"))
+            ks = byid.get("18:7") or {}
+            ki = {i["name"]: i for i in (ks.get("inputs") or [])}
+            ok("KSampler 分到采样组", ks.get("cat") == "sampler", ks.get("cat"))
+            ok("steps 是数字且 max=10000", (ki.get("steps") or {}).get("max") == 10000, ki.get("steps"))
+            ok("sampler_name 是下拉", (ki.get("sampler_name") or {}).get("type") == "combo", ki.get("sampler_name"))
+            ok("model 这类连线输入是只读 link", (ki.get("model") or {}).get("type") == "link", ki.get("model"))
+            lat = byid.get("18:6") or {}
+            li = {i["name"]: i for i in (lat.get("inputs") or [])}
+            ok("latent 的 width 显示成连线来源 19",
+               (li.get("width") or {}).get("type") == "link"
+               and str((li.get("width") or {}).get("from")) == "19", li.get("width"))
+
+            st, j = req("/api/plugin/comfy_runner/setnodes", {"id": mid, "edits": [
+                {"node": "18:6", "field": "width", "value": 111}]})
+            ok("连线输入写不进去", j.get("changed") in (0, None), j)
+
+            st, j = req("/api/plugin/comfy_runner/setnodes", {"id": mid, "edits": [
+                {"node": "18:7", "field": "steps", "value": 33},
+                {"node": "18:7", "field": "sampler_name", "value": "dpmpp_2m"},
+                {"node": "19", "field": "aspect_ratio", "value": "3:4 (Portrait Standard)"}]})
+            ok("setnodes 写入 3 项", j.get("changed") == 3, j)
+            st, j2 = req("/api/plugin/comfy_runner/nodes?id=%s" % urllib.parse.quote(str(mid)))
+            r2 = {str(r.get("id")): r for r in (j2.get("nodes") or [])}
+            v2 = {i["name"]: i.get("value") for i in ((r2.get("18:7") or {}).get("inputs") or [])}
+            ok("steps 读回 33", v2.get("steps") == 33, v2.get("steps"))
+            ok("sampler_name 读回 dpmpp_2m", v2.get("sampler_name") == "dpmpp_2m", v2.get("sampler_name"))
+
+            st, j = req("/api/plugin/comfy_runner/run", {
+                "id": mid, "prompt": "全节点测试 NODES-9",
+                "nodes": [{"node": "18:7", "field": "cfg", "value": 4.5}]})
+            ok("run 带节点改动提交成功", j.get("ok") is True, j.get("error"))
+            ok("used 里记了节点改动", any("节点改动" in str(x) for x in (j.get("used") or [])), j.get("used"))
+            gk = (Fake.last_prompt or {}).get("prompt") or Fake.last_prompt or {}
+            kk = ((gk.get("18:7") or {}).get("inputs") or {})
+            ok("Fake 收到 cfg=4.5", abs(float(kk.get("cfg") or 0) - 4.5) < 1e-6, kk.get("cfg"))
+            ok("Fake 收到之前保存的 steps=33", int(kk.get("steps") or 0) == 33, kk.get("steps"))
+
     finally:
+        # 把插件的 ComfyUI 地址还原成默认，免得测试把用户配置改成假服务
+        try:
+            req("/api/plugins/settings", {"id": "comfy_runner",
+                                          "values": {"comfy_url": "http://127.0.0.1:8188"}}, timeout=10)
+        except Exception:  # noqa: BLE001
+            pass
         try:
             pm.terminate()
             pm.wait(timeout=10)

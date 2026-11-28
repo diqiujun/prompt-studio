@@ -275,6 +275,7 @@ class Extractor(threading.Thread):
             total = sum(i.file_size for i in items) or 1
             done = 0
             t0 = time.time()
+            last_log = 0.0
             for info in items:
                 if self.stop:
                     raise RuntimeError("已取消")
@@ -293,7 +294,9 @@ class Extractor(threading.Thread):
                         if self.progress_cb:
                             speed = done / max(0.001, time.time() - t0)
                             self.progress_cb(done, total, speed)
-                if self.log_cb:
+                # 文件名提示节流：每 0.15 秒最多发一次，别把 GUI 事件队列灌满
+                if self.log_cb and (time.time() - last_log) > 0.15:
+                    last_log = time.time()
                     self.log_cb(name)
             self.done_cb(True, "解包完成")
         except Exception as exc:
@@ -348,8 +351,10 @@ def run_gui():
     """
 
     class Setup(QWidget):
-        sig_progress = pyqtSignal(int, int, float)
+        # 字节数是 64 位量级（6.5 GB > 2^31），必须用 qlonglong，否则 Qt 的 int 会溢出
+        sig_progress = pyqtSignal("qlonglong", "qlonglong", float)
         sig_done = pyqtSignal(bool, str)
+        sig_file = pyqtSignal(str)
 
         def __init__(self):
             super().__init__()
@@ -362,6 +367,8 @@ def run_gui():
             self.target = default_dir()
             self.extractor = None
             self.finished_ok = False
+            self.failed = False
+            self.auto = False
 
             root = QVBoxLayout(self)
             root.setContentsMargins(22, 20, 22, 18)
@@ -503,6 +510,7 @@ def run_gui():
 
             self.sig_progress.connect(self.on_progress)
             self.sig_done.connect(self.on_done)
+            self.sig_file.connect(self.on_file)
             self.update_space()
             self.ed_dir.textChanged.connect(self.update_space)
 
@@ -578,7 +586,7 @@ def run_gui():
             self.btn_next.setEnabled(False)
             self.btn_next.setText("安装中…")
             self.lb_step.setText("正在解包（约 1–3 分钟，视硬盘速度）…")
-            self.extractor = Extractor(self.target, self.sig_progress.emit, self.sig_done.emit, self.on_file)
+            self.extractor = Extractor(self.target, self.sig_progress.emit, self.sig_done.emit, self.sig_file.emit)
             self.extractor.start()
 
         def on_file(self, name):
@@ -586,13 +594,18 @@ def run_gui():
             self.lb_file.setText(short)
 
         def on_progress(self, done, tot, speed):
-            self.bar.setValue(int(1000.0 * done / max(1, tot)))
+            pct = int(1000.0 * done / max(1, tot))
+            self.bar.setValue(max(0, min(1000, pct)))
             self.lb_stat.setText("%s / %s · %s/s · 剩余约 %d 秒"
                                  % (human(done), human(tot), human(speed),
                                     int((tot - done) / max(1.0, speed))))
 
         def on_done(self, ok, msg):
             if not ok:
+                self.failed = True
+                say("解包失败：%s" % msg)
+                if self.auto:
+                    return
                 QMessageBox.critical(self, "安装失败", "解包失败：%s\n\n可换个目录重试，或用管理员身份运行。" % msg)
                 self.btn_next.setEnabled(True)
                 self.btn_next.setText("重新安装")
@@ -603,7 +616,10 @@ def run_gui():
             QApplication.processEvents()
             exe = os.path.join(self.target, APP_SHORT + ".exe")
             if not os.path.isfile(exe):
-                QMessageBox.critical(self, "安装失败", "解包后没有找到 %s.exe，安装包可能损坏。" % APP_SHORT)
+                self.failed = True
+                say("解包后没有找到 %s.exe" % APP_SHORT)
+                if not self.auto:
+                    QMessageBox.critical(self, "安装失败", "解包后没有找到 %s.exe，安装包可能损坏。" % APP_SHORT)
                 return
             make_shortcuts(self.target, self.cb_desktop.isChecked(), self.cb_menu.isChecked())
             self.lb_step.setText("正在登记卸载信息…")
@@ -665,6 +681,30 @@ def run_gui():
         app.exec()
         return 0
 
+    # 自动化验收：--auto=<目录> 直接开始安装，装完（或失败）自己退出，不弹窗
+    auto = ""
+    for a in sys.argv[1:]:
+        if a.startswith("--auto="):
+            auto = a.split("=", 1)[1]
+    if auto:
+        w.auto = True
+        w.ed_dir.setText(auto)
+        QTimer.singleShot(400, w.start_install)
+
+        def _poll():
+            if w.finished_ok:
+                app.exit(0)
+                return
+            if w.failed:
+                app.exit(2)
+                return
+            QTimer.singleShot(700, _poll)
+
+        QTimer.singleShot(1200, _poll)
+        QTimer.singleShot(30 * 60 * 1000, lambda: app.exit(4))
+        app.exec()
+        return 0 if w.finished_ok else 2
+
     app.exec()
     return 0 if w.finished_ok else 1
 
@@ -716,7 +756,49 @@ def run_silent(target, desktop=True, startmenu=True, launch=False):
     return 0
 
 
+def _crash_hooks():
+    """崩溃兜底：未捕获异常 / 段错误都写日志（windowed 版没有控制台，只能落文件）。"""
+    import faulthandler
+    base = os.path.dirname(os.path.abspath(sys.executable))
+    fh = None
+    try:
+        fh = open(os.path.join(base, "setup_crash.log"), "a", encoding="utf-8", buffering=1)
+        faulthandler.enable(file=fh, all_threads=True)
+    except Exception:
+        fh = None
+
+    def hook(tp, val, tb):
+        import traceback
+        txt = "".join(traceback.format_exception(tp, val, tb))
+        try:
+            say("崩溃：" + txt.replace("\n", " ⏎ ")[:1500])
+        except Exception:
+            pass
+        if fh:
+            try:
+                fh.write(txt + "\n")
+                fh.flush()
+            except Exception:
+                pass
+        try:
+            from PyQt6.QtWidgets import QApplication, QMessageBox
+            if QApplication.instance():
+                QMessageBox.critical(None, "安装程序出错",
+                                     "安装时遇到错误：\n\n%s\n\n可以换个目录重试；日志在同目录 setup_run.log / "
+                                     "setup_crash.log。" % txt.strip().splitlines()[-1][:300])
+        except Exception:
+            pass
+
+    sys.excepthook = hook
+    return fh
+
+
+_CRASH_FH = None
+
+
 def main():
+    global _CRASH_FH
+    _CRASH_FH = _crash_hooks()
     args = sys.argv[1:]
     if "--silent" in args:
         target = default_dir()

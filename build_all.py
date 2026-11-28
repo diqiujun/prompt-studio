@@ -50,9 +50,15 @@ def main():
             os.rename(APP, prev)
             log("   moved %s → %s" % (APP, prev))
         except OSError as e:
-            log("   ! 挪不动（可能仍有进程占用）：%s" % e)
-            log("     先手动关掉 PromptStudio 再跑，或重启后再试")
-            return 1
+            log("   ! 直接改名失败（%s），改用 robocopy 搬移" % e)
+            rc = subprocess.run(["robocopy", APP, prev, "/E", "/MOVE",
+                                 "/NFL", "/NDL", "/NJH", "/NJS", "/NC", "/NS", "/NP"],
+                                capture_output=True).returncode
+            shutil.rmtree(APP, ignore_errors=True)
+            if rc >= 8 or os.path.isdir(APP):
+                log("   !! robocopy 也没搬走（rc=%s），请关掉 PromptStudio 或重启后再试" % rc)
+                return 1
+            log("   moved by robocopy %s → %s (rc=%s)" % (APP, prev, rc))
 
     log("== 2. 静态检查 ==")
     run([sys.executable, "compile_check.py"])
