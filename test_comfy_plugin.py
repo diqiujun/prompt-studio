@@ -438,12 +438,12 @@ def main():
         dep = os.path.join(ROOT, "plugins", "comfy_runner")
         pj = json.load(open(os.path.join(dep, "plugin.json"), encoding="utf-8"))
         ok("plugin.json 有 web", bool((pj.get("web") or {}).get("js")), (pj.get("web") or {}).get("js"))
-        ok("web.mount = sidebar（挂右侧工具栏）", (pj.get("web") or {}).get("mount") == "sidebar", (pj.get("web") or {}).get("mount"))
+        ok("web.mount = page（独立主界面页）", (pj.get("web") or {}).get("mount") == "page", (pj.get("web") or {}).get("mount"))
         for f in ("plugin.py", "web/panel.js", "web/panel.css", "plugin.json"):
             ok("文件存在 %s" % f, os.path.exists(os.path.join(dep, f)))
         js = open(os.path.join(dep, "web", "panel.js"), encoding="utf-8").read()
         ok("panel.js 注册面板", "PSPlugin.addPanel" in js and 'id: "comfy_runner"' in js)
-        ok("panel.js 挂到 sidebar", 'mount: "sidebar"' in js)
+        ok("panel.js 挂到 page", 'mount: "page"' in js)
         ok("panel.js 两页签", '"imp"' in js and '"gen"' in js)
         ok("panel.js 提交 / 轮询", "run" in js and "status?prompt_id=" in js)
         ok("panel.js 取内容描述", "#content" in js)
@@ -774,6 +774,36 @@ def main():
             kk = ((gk.get("18:7") or {}).get("inputs") or {})
             ok("Fake 收到 cfg=4.5", abs(float(kk.get("cfg") or 0) - 4.5) < 1e-6, kk.get("cfg"))
             ok("Fake 收到之前保存的 steps=33", int(kk.get("steps") or 0) == 33, kk.get("steps"))
+
+            # 画布用的拓扑数据：连线 / 分层 / 组 / 复合节点
+            edges = j2.get("edges") or []
+            layers = j2.get("layers") or []
+            ok("nodes 返回连线 edges", isinstance(edges, list) and len(edges) > 10, len(edges))
+            ok("每条连线是 [from, slot, to, idx] 四元",
+               bool(edges) and isinstance(edges[0], list) and len(edges[0]) == 4, edges[:1])
+            ok("nodes 返回分层 layers", isinstance(layers, list) and len(layers) >= 2, len(layers))
+            ok("分层里没有重复节点",
+               len([x for L in layers for x in L]) == len(set(x for L in layers for x in L)),
+               [len(L) for L in layers])
+            ok("每层里的节点在原图里都存在",
+               all(str(x) in {str(r.get("id")) for r in rows} for L in layers for x in L), True)
+            ok("节点带 group 字段（复合节点靠 id 前缀）",
+               all("group" in r for r in rows), [r.get("id") for r in rows if "group" not in r])
+            ok("画布需要的 complex 字段存在", any("complex" in r for r in rows), None)
+            ok("ResolutionSelector 不算复合节点", not rs.get("complex"), rs.get("complex"))
+            ok("nodes 返回 cats 供分组标题",
+               isinstance(j2.get("cats"), dict) and len(j2.get("cats") or {}) >= 4, j2.get("cats"))
+
+            pj = json.load(open(os.path.join(ROOT, "plugins", "comfy_runner", "plugin.json"), "r", encoding="utf-8"))
+            ok("插件改成独立页面 mount=page", (pj.get("web") or {}).get("mount") == "page",
+               (pj.get("web") or {}).get("mount"))
+            pjs = ""
+            with open(os.path.join(ROOT, "plugins", "comfy_runner", "web", "panel.js"), "r", encoding="utf-8") as f:
+                pjs = f.read()
+            ok("panel.js 声明 mount: page", 'mount: "page"' in pjs, None)
+            ok("panel.js 有整页外壳 SHELL", "function SHELL(" in pjs and 'class="cv-bar"' in pjs, None)
+            ok("panel.js 有画布渲染 cvDraw", "function cvDraw(" in pjs, None)
+            ok("panel.js 有缩放适配 cvFit", "function cvFit(" in pjs, None)
 
             # == 14. 主界面参考图直接引用（stage 一次，之后只传文件名）==
             out("\n== 14. 主界面参考图直接引用 ==")

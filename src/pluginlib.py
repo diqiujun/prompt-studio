@@ -266,7 +266,7 @@ def _norm_web(raw, base):
     if not out:
         return {}
     mount = str(raw.get("mount") or "prompt")
-    out["mount"] = mount if mount in ("prompt", "settings", "both", "sidebar") else "prompt"
+    out["mount"] = mount if mount in ("prompt", "settings", "both", "sidebar", "page") else "prompt"
     out["title"] = str(raw.get("title") or "")
     return out
 

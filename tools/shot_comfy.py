@@ -73,7 +73,7 @@ def main():
                "--user-data-dir=" + os.path.join(ROOT, "data", "_edge_sb"),
                "--window-size=%s,%s" % (w, h), "--virtual-time-budget=6000",
                "--screenshot=" + out,
-               "http://127.0.0.1:%d/?theme=%s&sbar=comfy_runner%s" % (PORT, a.theme, a.extra)]
+               "http://127.0.0.1:%d/?theme=%s&tab=plug-comfy_runner%s" % (PORT, a.theme, a.extra)]
         subprocess.run(cmd, timeout=180, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print("shot:", out, os.path.getsize(out) if os.path.exists(out) else "MISSING")
     finally:

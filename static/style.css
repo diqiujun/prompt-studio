@@ -341,3 +341,9 @@ body.sbar-nopanel .sbarOpen{display:none}
 .pathrow{display:flex;gap:6px;align-items:center}
 .pathrow input{flex:1 1 auto;min-width:0}
 .pathrow .locpick{flex:0 0 auto;white-space:nowrap}
+
+/* plugin full pages (mount: "page") */
+main > section.plugpage{padding:0}
+@media (max-width: 1400px){
+  .cv-side{width:360px}
+}

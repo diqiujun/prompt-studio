@@ -107,9 +107,8 @@ async function api(path, body, method) {
 function showTab(name) {
   S.tab = name;
   $$("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
-  ["prompt", "translate", "history", "settings"].forEach((t) => {
-    $("#tab-" + t).style.display = t === name ? "" : "none";
-  });
+  const cur = $("#tab-" + name);
+  $$("main > section").forEach((s) => { s.style.display = s === cur ? "" : "none"; });
   if (name === "history") loadHistory();
   if (name === "settings") { renderProviders(); loadSpecMgr(); localRefresh(); loadPlugins(); loadRuntime(); }
 }
@@ -452,6 +451,7 @@ const PSPlugin = {
     PSPlugin._panels.forEach(function (p) {
       const mount = p.mount || "prompt";
       if (mount === "sidebar") { PSPlugin.mountSbar(p); return; }
+      if (mount === "page") { PSPlugin.mountPage(p); return; }
       const host = hosts[mount] || hosts.prompt;
       if (!host) { return; }
       let el = host.querySelector('[data-ppanel="' + p.id + '"]');
@@ -478,6 +478,41 @@ const PSPlugin = {
       }
     });
     PSPlugin.sbarRefresh();
+  },
+  /* ---- 独立页面：mount="page" 的插件占一个自己的导航页 ---- */
+  addPage: function (opt) {
+    if (!opt || !opt.id) { return null; }
+    const tab = "plug-" + opt.id;
+    let sec = $("#tab-" + tab);
+    if (sec) { return sec; }
+    const nav = document.querySelector("nav");
+    const main = document.querySelector("main");
+    if (!nav || !main) { return null; }
+    const btn = document.createElement("button");
+    btn.dataset.tab = tab;
+    btn.textContent = opt.title || opt.id;
+    btn.onclick = function () { showTab(tab); };
+    nav.appendChild(btn);
+    sec = document.createElement("section");
+    sec.id = "tab-" + tab;
+    sec.className = "plugpage";
+    sec.style.display = "none";
+    main.appendChild(sec);
+    const _want = /[?&]tab=([\w\-]+)/.exec(location.search);
+    if (_want && _want[1] === tab) { showTab(tab); }   /* ?tab=plug-xxx 直达：页是后建的，得再切一次 */
+    return sec;
+  },
+  mountPage: function (p) {
+    const sec = PSPlugin.addPage({ id: p.id, title: p.title || p.id });
+    if (!sec) { return; }
+    if (sec.dataset.mounted === "1") { return; }
+    sec.dataset.mounted = "1";
+    sec.innerHTML = "";
+    try {
+      p.render(sec, PSPlugin);
+    } catch (e) {
+      sec.innerHTML = '<p class="mini err">插件页面出错：' + esc(e.message) + "</p>";
+    }
   },
   /* ---- 右侧工具栏：mount="sidebar" 的插件挂在这里，页签切换 ---- */
   mountSbar: function (p) {
@@ -1493,7 +1528,7 @@ async function boot() {
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape" && $("#tplEd").classList.contains("on")) closeTplEditor();
   });
-  const _tab = /[?&]tab=(\w+)/.exec(location.search);   /* 支持 ?tab=settings 直达 */
+  const _tab = /[?&]tab=([\w\-]+)/.exec(location.search);   /* 支持 ?tab=settings 与 ?tab=plug-comfy_runner 直达 */
   if (_tab) showTab(_tab[1]);
   const _sb = /[?&]sbar=([\w\-]+)/.exec(location.search); /* 支持 ?sbar=插件id 直达侧栏页签 */
   if (_sb) PSPlugin._sbarCur = _sb[1];
