@@ -248,6 +248,17 @@ def register(ctx):
 - 钩子目前支持 `generate.after`（payload：template / content / output / json / params / settings；返回字符串＝替换输出，返回 None＝不动）。
 - 工具契约：`fn(text, params) -> str | {"text": ..., "note": ...}`；接口契约：`fn(body, query) -> dict`。
 
+### ComfyUI 工作流插件的「全部节点」
+
+侧栏「ComfyUI 工作流」会把导入的 api 工作流里**每一个节点**都列出来，参数与 ComfyUI 里完全对应：
+
+- **列表位置**：模型/LoRA 区下方「全部节点 · 可改的都在这儿」，按 输入 / 文本 / 模型 / 采样 / 输出 / 其它 分组，点标题展开，点一次搜索框可按类名（`KSampler`）或编号（`18:7`）过滤。
+- **控件类型照 ComfyUI 官方定义**：连上 ComfyUI 时，下拉框（`sampler_name` 45 项、`scheduler` 9 项、`aspect_ratio` 8 项）带范围与步长的数字框（`steps` 1–10000、`megapixels` 0.1–16 步长 0.01）与多行文本框，都按 `/object_info` 还原；**ComfyUI 没开**时按值猜类型（布尔→勾选、数字→数字框、长文本→多行），面板会提示「类型是按值猜的」。
+- **连线输入只读**：显示 `⇢ #来源节点`，改不了也不会被写进去（那是由上游决定的）。
+- **改动怎么生效**：改完点「生成」→ 先把改动写进工作流再提交；点「保存这些改动」→ 直接写回 `data\plugins\comfy_runner\wf\<id>.json`，下次打开还是你改过的值。
+- **官方节点名**：每个节点右侧的小字是 ComfyUI 的官方显示名（`Load Diffusion Model`、`CLIP Text Encode (Prompt)`、`Skip Layer Guidance DiT Simple`），不是类名。
+- 调试用：在地址后加 `?allnodes=1` 可一次展开全部节点，加 `&q=KSampler` 可预填过滤词。
+
 ---
 
 ## 九、运行环境（自带 llama.cpp，按硬件自动适配）
@@ -278,6 +289,9 @@ def register(ctx):
 - **换电脑**：把 exe 所在目录整体拷走即可；`data\` 带着你的配置和历史。
 - **本地模型生成完就不见了**：正常。设置页勾了「用时加载、生成完自动卸载」时，模型只在生成的那几秒活着，结束后显存就还给系统；把勾去掉就是常驻。
 - **ComfyUI 插件认不出提示词在哪**：先在导入结果里看黄色提示；把「正向提示词」下拉改成 `1.timeline_data › segments[0].prompt` 这类复合节点路径再保存即可。
+- **ComfyUI 图生视频 / 多参工作流上传了图没生效**：这类工作流的素材不挂在 `LoadImage` 节点上，而是存在导演台的 `timeline_data` 里（`segments[0].refs[].imageFile`）。插件会认出「段1·参考图1」这类时间轴槽，上传后自动写回 `imageFile`，面板上会显示「参考图存在导演台时间轴里，上传后自动写回 timeline_data」。r2v 只列参考图槽、i2v 只列首帧、fl2v 列首帧+尾帧。
+- **多图最多 9 张**：面板的参考图槽最多 9 个。工作流本身只有 3 个 `images.image_N` 输入时（比如 Qwen 2.1 多图编辑），第 4 张起插件会**自动新建 `LoadImage` 并接到 `images.image_4/5/…`**，不需要你在 ComfyUI 里先接好。想传满 9 张直接拖 9 张进来即可。
+- **多参的音频 / 视频**：r2v 的参考**图片**由插件负责（最多 9 张）；参考**音频（3 个）与参考视频（3 个）**目前要在 ComfyUI 的导演台里选好，插件不动它们。
 - **API Key 安全**：明文存在本机 `data\config.json`，界面只显示后 4 位，接口不返回明文。
 
 ## 十一、安装
