@@ -775,6 +775,41 @@ def main():
             ok("Fake 收到 cfg=4.5", abs(float(kk.get("cfg") or 0) - 4.5) < 1e-6, kk.get("cfg"))
             ok("Fake 收到之前保存的 steps=33", int(kk.get("steps") or 0) == 33, kk.get("steps"))
 
+            # == 14. 主界面参考图直接引用（stage 一次，之后只传文件名）==
+            out("\n== 14. 主界面参考图直接引用 ==")
+            png = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH"
+                   "/q842iQAAAABJRU5ErkJggg==")
+            durl = "data:image/png;base64," + png
+            before = len(Fake.uploads)
+            st, j = req("/api/plugin/comfy_runner/stage", {"images": [
+                {"name": "pm1", "data_url": durl}, {"name": "pm2", "data_url": durl}]})
+            ok("stage 上传两张", j.get("ok") is True and len(j.get("files") or []) == 2, j)
+            ok("确实传到 ComfyUI 两张", len(Fake.uploads) - before == 2, Fake.uploads[before:])
+            pfiles = [f.get("file") for f in (j.get("files") or [])]
+            ok("返回 pm 前缀文件名", len(pfiles) == 2 and all(str(f).startswith("pm") for f in pfiles), pfiles)
+            ok("返回预览地址", all("view?" in str(f.get("url")) for f in (j.get("files") or [])),
+               (j.get("files") or [{}])[0])
+
+            st, j = req("/api/plugin/comfy_runner/stage", {"images": []})
+            ok("没有图时给中文提示", j.get("ok") is False and "参考图" in str(j.get("error")), j)
+
+            before = len(Fake.uploads)
+            st, j = req("/api/plugin/comfy_runner/run", {
+                "id": mid, "prompt": "PM 参考图直接引用 PMREF", "files": pfiles})
+            ok("run 用文件名提交成功", j.get("ok") is True, j.get("error"))
+            ok("不再重复上传整图", len(Fake.uploads) == before, Fake.uploads[before:])
+            ok("used 记了引用主界面图",
+               any("引用主界面图" in str(x) for x in (j.get("used") or [])), j.get("used"))
+            # MOSS 是文生图（没有图槽），文件名无处落 → 换带图槽的多图编辑工作流验证填槽
+            st, jj = req("/api/plugin/comfy_runner/import",
+                         {"workflow": qg, "name": "PM 参考图·多图编辑"})
+            pmid = (jj.get("item") or {}).get("id")
+            st, j = req("/api/plugin/comfy_runner/run", {
+                "id": pmid, "prompt": "PM 参考图填槽 PMREF2", "files": pfiles})
+            ok("带图槽的工作流用文件名填槽成功", j.get("ok") is True, j.get("error"))
+            gj = json.dumps(Fake.last_prompt or {}, ensure_ascii=False)
+            ok("工作流里用上了这两个文件名", pfiles[0] in gj and pfiles[1] in gj, pfiles)
+
     finally:
         # 把插件的 ComfyUI 地址还原成默认，免得测试把用户配置改成假服务
         try:
